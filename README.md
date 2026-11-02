@@ -17,6 +17,66 @@
 
 ---
 
+## Status at a glance
+
+| Item | Status |
+|---|---|
+| Signals, flexible loads and constraints | ✅ Written ([doc 01](docs/01-signals-and-loads.md)) |
+| Strategies (cheapest, cleanest, peak limiting, events, fail-safe) | ✅ Written ([doc 02](docs/02-strategies.md)) |
+| Measurement and verification method | ✅ Written ([doc 03](docs/03-measurement.md)) |
+| Price, import and carbon signals into HA; EV cheapest-window charging; peak limiter (shadow mode) | ⏳ To build |
+
+## Why it matters
+
+Commercial BMS increasingly does energy management, not just comfort: shifting load to cheap or low-carbon periods, capping peak demand, and responding to grid flexibility events. A home with an EV charger, time-of-use tariffs and half-hourly smart-meter data has the same problem at small scale, with the same rule: **flexibility only where comfort and safety allow.**
+
+## How it works
+
+```mermaid
+flowchart LR
+    P["Half-hourly prices<br/>(supplier API)"] --> S["Scheduler / limiter<br/>(HA + Node-RED)"]
+    M["Live import<br/>(smart meter)"] --> S
+    C["Carbon intensity<br/>forecast"] --> S
+    E["Flexibility events"] --> S
+    S -->|"start / defer / pause"| EV["EV charger"]
+    S --> AP["Dishwasher /<br/>washer-dryer"]
+    S --> WS["Workshop / 3D printers<br/>(with consent)"]
+    S -.->|"later"| DHW["DHW reheat timing"]
+    K["Constraints:<br/>departure charge · comfort bands ·<br/>never interrupt a cycle"] --> S
+```
+
+## Flexible loads and their constraints
+
+| Load | Flexibility | Constraint |
+|---|---|---|
+| EV charger | High: hours | Target charge by departure |
+| Dishwasher / washer-dryer | Medium: start delay | Finish by a set time; never interrupt a cycle |
+| Workshop / 3D printers | Low: start delay | Operator consent |
+| DHW reheat (later) | Medium | Cylinder minimum temperature |
+
+## Strategies
+
+1. **Cheapest window:** each flexible load scheduled into the lowest-price slots that still meet its constraint.
+2. **Cleanest window:** the same, ranked by carbon intensity (selectable, or a weighted blend with price).
+3. **Peak-demand limiting:** if import exceeds a threshold (e.g. 7 kW) for 2 minutes, reduce or defer loads in priority order (EV first; never heating safety or DHW minimums), restoring with hysteresis.
+4. **Event response:** during a supplier event, pause flexible loads and log the delivered reduction.
+5. **Fail-safe:** if prices or data are unavailable, every device reverts to its own schedule.
+
+## Measurement and verification
+
+| Metric | Method |
+|---|---|
+| Cost saved | Actual cost vs the same energy at the average unit price |
+| Carbon saved | Energy × intensity vs a flat average |
+| Peak import | Monthly maximum half-hour demand, before vs after |
+| Event delivery | kWh reduced vs a baseline for each event |
+
+## Design decisions
+
+- **Shadow mode first:** the peak limiter logs what it *would* have shed for a few weeks before it's allowed to act.
+- **Constraints are hard, objectives are soft:** a departure deadline or a running wash cycle always beats a cheaper slot.
+- **Local fallback:** every device keeps a working schedule of its own, so a lost price feed never leaves the house without hot water or a charged car.
+
 ## Documents
 
 | Doc | Contents |
